@@ -11,7 +11,25 @@ namespace ThreadPoolExercises.Core
             //   HINT: you may use `Join` to wait until created Thread finishes
             // * In a loop, check whether `token` is not cancelled
             // * If an `action` throws and exception (or token has been cancelled) - `errorAction` should be invoked (if provided)
+            var thread = new Thread(ThreadStart) {IsBackground = true};
+            thread.Start();
+            thread.Join();
 
+            void ThreadStart()
+            {
+                try
+                {
+                    for (var i = 0; i < repeats; i++)
+                    {
+                        token.ThrowIfCancellationRequested();
+                        action();
+                    }
+                }
+                catch (Exception e)
+                {
+                    errorAction?.Invoke(e);
+                }
+            }
 
 
         }
@@ -22,9 +40,37 @@ namespace ThreadPoolExercises.Core
             //   HINT: you may use `AutoResetEvent` to wait until the queued work item finishes
             // * In a loop, check whether `token` is not cancelled
             // * If an `action` throws and exception (or token has been cancelled) - `errorAction` should be invoked (if provided)
+            
+            var autoResetEvent = new AutoResetEvent(false);
+            
+            var args = Tuple.Create(action, repeats, token, errorAction, autoResetEvent);
+            
+            ThreadPool.QueueUserWorkItem(state => ThreadPoolWaitCallback(state!), args);
+            autoResetEvent.WaitOne();
 
 
+        }
+        static void ThreadPoolWaitCallback(object args)
+        {
+            var (action, repeats, token, errorAction, autoResetEvent) =
+                (Tuple<Action, int, CancellationToken, Action<Exception>?, AutoResetEvent>) args;
 
+            try
+            {
+                for (var i = 0; i < repeats; i++)
+                {
+                    token.ThrowIfCancellationRequested();
+                    action();
+                }
+            }
+            catch (Exception e)
+            {
+                errorAction?.Invoke(e);
+            }
+            finally
+            {
+                autoResetEvent?.Set();
+            }
         }
     }
 }
